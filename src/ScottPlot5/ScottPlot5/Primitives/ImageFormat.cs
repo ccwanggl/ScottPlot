@@ -1,7 +1,4 @@
-﻿using System.ComponentModel;
-using static System.Net.Mime.MediaTypeNames;
-
-namespace ScottPlot;
+﻿namespace ScottPlot;
 
 public enum ImageFormat
 {
@@ -10,6 +7,30 @@ public enum ImageFormat
     Png,
     Webp,
     Svg,
+}
+
+public static class ImageFormats
+{
+    public static ImageFormat FromFileExtension(string ext)
+    {
+        if (!ext.StartsWith("."))
+            throw new ArgumentException("extension must start with '.'");
+
+        return ext.ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => ImageFormat.Jpeg,
+            ".png" => ImageFormat.Png,
+            ".bmp" => ImageFormat.Bmp,
+            ".webp" => ImageFormat.Webp,
+            ".svg" => ImageFormat.Svg,
+            _ => throw new ArgumentException($"unknown image format: '{ext}'")
+        };
+    }
+
+    public static ImageFormat FromFilename(string filename)
+    {
+        return FromFileExtension(Path.GetExtension(filename));
+    }
 }
 
 public static class ImageFormatExtensions
@@ -26,27 +47,16 @@ public static class ImageFormatExtensions
             _ => throw new ArgumentException($"unknown image format: '{format}'")
         };
     }
-}
 
-public static class ImageFormatLookup
-{
-    public static ImageFormat FromFileExtension(string ext)
+    public static SKEncodedImageFormat ToSKFormat(this ImageFormat fmt)
     {
-        if (!ext.StartsWith("."))
-            throw new ArgumentException("extension must start with '.'");
-
-        return ext.ToLowerInvariant() switch
+        return fmt switch
         {
-            ".jpg" or ".jpeg" => ImageFormat.Jpeg,
-            ".png" => ImageFormat.Png,
-            ".bmp" => ImageFormat.Bmp,
-            ".webp" => ImageFormat.Webp,
-            _ => throw new ArgumentException($"unknown image format: '{ext}'")
+            ImageFormat.Jpeg => SKEncodedImageFormat.Jpeg,
+            ImageFormat.Png => SKEncodedImageFormat.Png,
+            ImageFormat.Bmp => SKEncodedImageFormat.Bmp,
+            ImageFormat.Webp => SKEncodedImageFormat.Webp,
+            _ => throw new NotImplementedException($"unsupported format: {fmt}")
         };
-    }
-
-    public static ImageFormat FromFilePath(string path)
-    {
-        return FromFileExtension(Path.GetExtension(path));
     }
 }

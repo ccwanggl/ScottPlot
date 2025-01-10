@@ -4,10 +4,13 @@ public class RenderPlottables : IRenderAction
 {
     public void Render(RenderPack rp)
     {
-        foreach (var plottable in rp.Plot.PlottableList.Where(x => x.IsVisible))
+        IPlottable[] visiblePlottables = rp.Plot.PlottableList.Where(x => x.IsVisible).ToArray();
+
+        foreach (IPlottable plottable in visiblePlottables)
         {
             plottable.Axes.DataRect = rp.DataRect;
-            rp.Canvas.Save();
+
+            rp.CanvasState.Save();
 
             if (plottable is IPlottableGL plottableGL)
             {
@@ -15,11 +18,11 @@ public class RenderPlottables : IRenderAction
             }
             else
             {
-                rp.Canvas.ClipRect(rp.DataRect.ToSKRect());
+                rp.CanvasState.Clip(rp.DataRect);
                 plottable.Render(rp);
             }
 
-            rp.Canvas.Restore();
+            rp.CanvasState.DisableClipping();
         }
     }
 }

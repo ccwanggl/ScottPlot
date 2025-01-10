@@ -6,8 +6,44 @@
 /// </summary>
 public class FillStyle
 {
-    public Color Color { get; set; } = Colors.Black;
+    public Color Color { get; set; } = Colors.Transparent;
     public Color HatchColor { get; set; } = Colors.Gray;
     public IHatch? Hatch { get; set; } = null;
     public bool HasValue => Color != Colors.Transparent || Hatch is not null && HatchColor != Colors.Transparent;
+    public bool AntiAlias { get; set; } = true;
+    public bool IsVisible { get; set; } = true;
+    public bool CanBeRendered
+    {
+        get
+        {
+            if (IsVisible == false) return false;
+            if (Color.Alpha == 0) return false;
+            if (Color == Colors.Transparent) return false;
+            return true;
+        }
+    }
+
+    public void Render(SKCanvas canvas, PixelRect rect, SKPaint paint)
+    {
+        if (!IsVisible)
+            return;
+
+        Drawing.FillRectangle(canvas, rect, paint, this);
+    }
+
+    public void ApplyToPaint(SKPaint paint, PixelRect rect)
+    {
+        paint.Color = Color.ToSKColor();
+        paint.IsStroke = false;
+        paint.IsAntialias = AntiAlias;
+
+        if (Hatch is not null)
+        {
+            paint.Shader = Hatch.GetShader(Color, HatchColor, rect);
+        }
+        else
+        {
+            paint.Shader = null;
+        }
+    }
 }

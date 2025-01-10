@@ -1,8 +1,5 @@
 ﻿using System.Windows;
-using System.Windows.Input;
 using ScottPlot;
-
-#nullable enable
 
 namespace Sandbox.WPF;
 
@@ -12,18 +9,14 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        var crosshair = WpfPlot1.Plot.Add.Crosshair(0, 0);
+        WpfPlot1.Plot.Add.Signal(Generate.Sin());
+        WpfPlot1.Plot.Add.Signal(Generate.Cos());
+    }
 
+    private void Button_Click(object sender, RoutedEventArgs e)
+    {
+        WpfPlot1.Reset();
+        WpfPlot1.Plot.Add.Signal(Generate.RandomWalk(100));
         WpfPlot1.Refresh();
-        WpfPlot1.MouseMove += (s, e) =>
-        {
-            Point mousePoint = Mouse.GetPosition(WpfPlot1);
-            Pixel mousePixel = new(mousePoint.X, mousePoint.Y);
-            Coordinates mouseCoordinates = WpfPlot1.GetCoordinates(mousePixel);
-            crosshair.Position = mouseCoordinates;
-            WpfPlot1.Refresh();
-        };
-
-        WpfPlot1.Plot.ScaleFactor = 1.5f;
     }
 }

@@ -14,6 +14,9 @@ public static class Platform
 
     private static OS GetOS()
     {
+#if NETFRAMEWORK
+        return OS.Windows;
+#else
         if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
             return OS.Windows;
 
@@ -24,6 +27,7 @@ public static class Platform
             return OS.MacOS;
 
         return OS.Other;
+#endif
     }
 
     /// <summary>
@@ -45,5 +49,12 @@ public static class Platform
             default:
                 throw new InvalidOperationException("Cannot launch a web browser on this OS");
         }
+    }
+
+    public static void LaunchFile(string filePath)
+    {
+        filePath = Path.GetFullPath(filePath);
+        ProcessStartInfo psi = new(filePath) { UseShellExecute = true };
+        Process.Start(psi);
     }
 }

@@ -5,9 +5,16 @@
 /// </summary>
 public class Axes : IAxes
 {
+    // TODO: these should probably be readonly and passed into the constructor
     public IXAxis XAxis { get; set; } = null!;
     public IYAxis YAxis { get; set; } = null!;
     public PixelRect DataRect { get; set; }
+
+    public static Axes Default => new();
+
+    public Axes()
+    {
+    }
 
     public Coordinates GetCoordinates(Pixel pixel)
     {
@@ -25,6 +32,13 @@ public class Axes : IAxes
         float x = XAxis.GetPixel(coordinates.X, DataRect);
         float y = YAxis.GetPixel(coordinates.Y, DataRect);
         return new Pixel(x, y);
+    }
+
+    public PixelLine GetPixelLine(CoordinateLine line)
+    {
+        Pixel pt1 = GetPixel(line.Start);
+        Pixel pt2 = GetPixel(line.End);
+        return new PixelLine(pt1, pt2);
     }
 
     public float GetPixelX(double xCoordinate) => XAxis.GetPixel(xCoordinate, DataRect);

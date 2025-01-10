@@ -1,6 +1,6 @@
 ﻿namespace ScottPlot.AxisPanels;
 
-public abstract class YAxisBase : AxisBase, IAxis
+public abstract class YAxisBase : AxisBase, IYAxis
 {
     public double Height => Range.Span;
 
@@ -20,31 +20,26 @@ public abstract class YAxisBase : AxisBase, IAxis
         return Min - unitsFromMinValue;
     }
 
-    public float Measure()
+    public virtual float Measure()
     {
         if (!IsVisible)
             return 0;
 
-        float largestTickSize = MeasureTicks();
-        float largestTickLabelSize = Label.Measure().Height;
-        float spaceBetweenTicksAndAxisLabel = 15;
-        return largestTickSize + largestTickLabelSize + spaceBetweenTicksAndAxisLabel;
-    }
+        if (!Range.HasBeenSet)
+            return SizeWhenNoData;
 
-    private float MeasureTicks()
-    {
         using SKPaint paint = new();
-        TickFont.ApplyToPaint(paint);
+        float maxTickLabelWidth = TickGenerator.Ticks.Length > 0
+            ? TickGenerator.Ticks.Select(x => TickLabelStyle.Measure(x.Label, paint).Width).Max()
+            : 0;
 
-        float largestTickWidth = 0;
+        float axisLabelHeight = string.IsNullOrEmpty(LabelStyle.Text) && LabelStyle.Image is null
+            ? EmptyLabelPadding.Horizontal
+            : LabelStyle.Measure(LabelText, paint).Height
+                + PaddingBetweenTickAndAxisLabels.Horizontal
+                + PaddingOutsideAxisLabels.Horizontal;
 
-        foreach (Tick tick in TickGenerator.Ticks)
-        {
-            PixelSize tickLabelSize = Drawing.MeasureString(tick.Label, paint);
-            largestTickWidth = Math.Max(largestTickWidth, tickLabelSize.Width + 10);
-        }
-
-        return largestTickWidth;
+        return maxTickLabelWidth + axisLabelHeight;
     }
 
     private PixelRect GetPanelRectangleLeft(PixelRect dataRect, float size, float offset)
@@ -72,26 +67,35 @@ public abstract class YAxisBase : AxisBase, IAxis
             : GetPanelRectangleRight(dataRect, size, offset);
     }
 
-    public void Render(RenderPack rp, float size, float offset)
+    public virtual void Render(RenderPack rp, float size, float offset)
     {
         if (!IsVisible)
             return;
 
         PixelRect panelRect = GetPanelRect(rp.DataRect, size, offset);
-
-        float textDistanceFromEdge = 10;
-        Pixel labelPoint = new(panelRect.Left + textDistanceFromEdge, rp.DataRect.VerticalCenter);
+        float x = Edge == Edge.Left
+            ? panelRect.Left + PaddingOutsideAxisLabels.Horizontal
+            : panelRect.Right - PaddingOutsideAxisLabels.Horizontal;
+        Pixel labelPoint = new(x, rp.DataRect.VerticalCenter);
 
         if (ShowDebugInformation)
         {
-            Drawing.DrawDebugRectangle(rp.Canvas, panelRect, labelPoint, Label.Font.Color);
+            Drawing.DrawDebugRectangle(rp.Canvas, panelRect, labelPoint, LabelFontColor);
         }
 
-        Label.Alignment = Edge == Edge.Left ? Alignment.UpperCenter : Alignment.LowerCenter;
-        Label.Rotation = Edge == Edge.Left ? -90 : 90;
-        Label.Draw(rp.Canvas, labelPoint);
+        using SKPaint paint = new();
+        LabelAlignment = Alignment.UpperCenter;
 
-        DrawTicks(rp, TickFont, panelRect, TickGenerator.Ticks, this, MajorTickStyle, MinorTickStyle);
+        rp.CanvasState.Save();
+
+        if (ClipLabel)
+            rp.CanvasState.Clip(panelRect);
+
+        LabelStyle.Render(rp.Canvas, labelPoint, paint);
+
+        rp.CanvasState.Restore();
+
+        DrawTicks(rp, TickLabelStyle, panelRect, TickGenerator.Ticks, this, MajorTickStyle, MinorTickStyle);
         DrawFrame(rp, panelRect, Edge, FrameLineStyle);
     }
 
@@ -100,8 +104,15 @@ public abstract class YAxisBase : AxisBase, IAxis
         return distance * dataArea.Height / Height;
     }
 
-    public double GetCoordinateDistance(double distance, PixelRect dataArea)
+    public double GetCoordinateDistance(float distance, PixelRect dataArea)
     {
         return distance / (dataArea.Height / Height);
+    }
+
+    public void RegenerateTicks(PixelLength size)
+    {
+        using SKPaint paint = new();
+        TickLabelStyle.ApplyToPaint(paint);
+        TickGenerator.Regenerate(Range.ToCoordinateRange, Edge, size, paint, TickLabelStyle);
     }
 }

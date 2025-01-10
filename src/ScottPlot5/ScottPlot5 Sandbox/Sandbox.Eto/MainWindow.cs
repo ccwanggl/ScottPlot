@@ -9,14 +9,9 @@ partial class MainWindow : Form
     {
         InitializeComponent();
 
-        var crosshair = EtoPlot1.Plot.Add.Crosshair(0, 0);
+        EtoPlot1.UserInputProcessor.IsEnabled = true;
 
-        EtoPlot1.MouseMove += (s, e) =>
-        {
-            Pixel mousePixel = new(e.Location.X, e.Location.Y);
-            Coordinates mouseCoordinates = EtoPlot1.GetCoordinates(mousePixel);
-            crosshair.Position = mouseCoordinates;
-            EtoPlot1.Refresh();
-        };
+        EtoPlot1.Plot.Add.Signal(Generate.Sin());
+        EtoPlot1.Plot.Add.Signal(Generate.Cos());
     }
 }

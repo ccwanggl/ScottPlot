@@ -9,106 +9,45 @@ on:
       - main
     paths:
       - src/**
+      - .github/workflows/ci.yaml
 
-env:
-  DOTNET_VERSION: "7.0.x"
+# cancel running versions of this workflow when this one starts
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
 
 jobs:
-  test-linux:
-    strategy:
-      matrix:
-        version: ["ScottPlot4", "ScottPlot5"]
-    env:
-      TEST_SOLUTION: "src/${{ matrix.version }}/${{ matrix.version }}-tests.slnf"
-    name: Test ${{ matrix.version }} on Linux
-    runs-on: ubuntu-latest
-    steps:
-      - name: 🛒 Checkout
-        uses: actions/checkout@v3
-      - name: ✨ Setup .NET ${{ env.DOTNET_VERSION }}
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-      - name: 🚚 Restore
-        run: dotnet restore ${{ env.TEST_SOLUTION }}
-      - name: 🛠️ Build
-        run: dotnet build ${{ env.TEST_SOLUTION }} --configuration Release --no-restore
-      - name: 🧪 Test
-        run: dotnet test ${{ env.TEST_SOLUTION }} --configuration Release --no-restore --verbosity minimal
+  # Run the autoformatter in parallel too.
+  # If it makes a change it will commit it and restart this workflow.
+  autoformat:
+    name: "Autoformat"
+    uses: ./.github/workflows/task-autoformat-fix.yaml
+    secrets:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
-  test-windows:
-    needs: [test-linux]
-    strategy:
-      matrix:
-        version: ["ScottPlot4", "ScottPlot5"]
-    env:
-      FULL_SOLUTION: "src/${{ matrix.version }}/${{ matrix.version }}.sln"
-      TEST_SOLUTION: "src/${{ matrix.version }}/${{ matrix.version }}-tests.slnf"
-    name: ${{ matrix.version }} Full Build
-    runs-on: windows-latest
-    steps:
-      - name: 🛒 Checkout
-        uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GH_TOKEN }}
-      - name: 🐢 Setup MSBuild
-        uses: microsoft/setup-msbuild@v1.1
-      - name: ✨ Setup .NET ${{ env.DOTNET_VERSION }}
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-      - name: 🚚 Restore
-        run: dotnet restore ${{ env.TEST_SOLUTION }}
-      - name: 🛠️ Build
-        run: dotnet build ${{ env.TEST_SOLUTION }} --configuration Release
-      - name: 🧪 Test
-        run: dotnet test ${{ env.TEST_SOLUTION }} --configuration Release --no-restore --verbosity minimal
-      - name: 🚚 Full Restore
-        run: dotnet restore ${{ env.FULL_SOLUTION }}
-      - name: 🛠️ Full Build
-        run: dotnet build ${{ env.FULL_SOLUTION }} --configuration Release
-      - name: ✍️ Autoformat
-        run: dotnet format ${{ env.FULL_SOLUTION }}
-      - name: 🚀 Push Formatting Changes
-        run: |
-          git config --global user.name 'Scott W Harden (via GitHub Actions)'
-          git config --global user.email 'swharden@gmail.com'
-          git pull
-          git commit -am "CI: autoformat"
-          git push
+  # This security analysis evaluates non-compiled code
+  security:
+    name: "Security"
+    uses: ./.github/workflows/task-security-scan.yaml
+    permissions:
+      security-events: write
 
-  changelog:
-    needs: [test-linux, test-windows]
-    runs-on: ubuntu-latest
-    name: Update Changelog Webpage
-    steps:
-      - name: 🚀 Trigger Remote Workflow
-        run: |
-          curl -L \
-            -X POST \
-            -H "Accept: application/json" \
-            -H "Authorization: Bearer ${{ secrets.GH_TOKEN }}" \
-            -d "{\"ref\":\"main\"}" \
-            https://api.github.com/repos/ScottPlot/ScottPlot.NET/actions/workflows/changelog.yaml/dispatches
+  full:
+    name: "Full Build"
+    uses: ./.github/workflows/task-full.yaml
+    permissions:
+      security-events: write
 
-  code-analysis:
-    needs: [test-linux, test-windows]
-    runs-on: ubuntu-latest
-    name: Code Metrics
-    steps:
-      - name: 🛒 Checkout
-        uses: actions/checkout@v3
-      - name: ✨ Setup .NET ${{ env.DOTNET_VERSION }}
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-      - name: 🧪 Run Code Analysis
-        run: dotnet run dotnet run --project dev/CodeAnalysis
-      - name: 🔐 Create Key File
-        run: install -m 600 -D /dev/null ~/.ssh/id_rsa
-      - name: 🔑 Populate Key
-        run: echo "${{ secrets.PRIVATE_SSH_KEY }}" > ~/.ssh/id_rsa
-      - name: 🚀 Deploy Webpage
-        run: rsync -e 'ssh -p 18765 -o StrictHostKeyChecking=no' 'dev/www/metrics/index.html' 'scottplot.net@ssh.scottplot.net:/home/customer/www/scottplot.net/public_html/metrics/index.html'
-      - name: 🧹 Clear Cache
-        run: ssh scottplot.net@ssh.scottplot.net -p 18765 "site-tools-client domain update id=1 flush_cache=1"
+  publish-changelog:
+    name: "Publish"
+    needs: [full]
+    uses: ./.github/workflows/task-publish-changelog.yaml
+    secrets:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+  publish-metrics:
+    name: "Publish"
+    needs: [full]
+    uses: ./.github/workflows/task-code-metrics.yaml
+    secrets:
+      private-ssh-key: ${{ secrets.PRIVATE_SSH_KEY }}

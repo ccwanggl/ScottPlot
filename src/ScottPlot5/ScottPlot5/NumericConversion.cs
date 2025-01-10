@@ -9,11 +9,30 @@ namespace ScottPlot;
 /// </summary>
 public static class NumericConversion
 {
-    private const MethodImplOptions ImplOptions =
+    internal const MethodImplOptions ImplOptions =
 #if NETCOREAPP
         MethodImplOptions.AggressiveOptimization |
 #endif
         MethodImplOptions.AggressiveInlining;
+
+    [MethodImpl(ImplOptions)]
+    public static double[] GenericToDoubleArray<T>(T[] values)
+    {
+        double[] values2 = new double[values.Length];
+
+        for (int i = 0; i < values.Length; i++)
+        {
+            values2[i] = GenericToDouble(values, i);
+        }
+
+        return values2;
+    }
+
+    [MethodImpl(ImplOptions)]
+    public static double[] GenericToDoubleArray<T>(IEnumerable<T> values)
+    {
+        return values.Select(value => GenericToDouble(ref value)).ToArray();
+    }
 
     /// <summary>
     /// Returns the double value of a <typeparamref name="T"/> 
@@ -24,7 +43,6 @@ public static class NumericConversion
     {
         return value switch
         {
-#if NETCOREAPP
             double vDouble => vDouble,
             float vSingle => Convert.ToDouble(vSingle),
             int vInt32 => Convert.ToDouble(vInt32),
@@ -35,9 +53,25 @@ public static class NumericConversion
             ushort vUint16 => Convert.ToDouble(vUint16),
             decimal vDecimal => Convert.ToDouble(vDecimal),
             byte vByte => Convert.ToDouble(vByte),
-#endif
+            DateTime vDateTime => ToNumber(vDateTime),
             _ => Convert.ToDouble(value),
         };
+    }
+
+    [MethodImpl(ImplOptions)]
+    public static Coordinates GenericToCoordinates<T1, T2>(ref T1 x, ref T2 y)
+    {
+        return new Coordinates(GenericToDouble(ref x), GenericToDouble(ref y));
+    }
+
+    [MethodImpl(ImplOptions)]
+    public static Coordinates[] GenericToCoordinates<T1, T2>(IEnumerable<T1> xs, IEnumerable<T2> ys)
+    {
+        double[] xs2 = GenericToDoubleArray(xs);
+        double[] ys2 = GenericToDoubleArray(ys);
+        if (xs2.Length != ys2.Length)
+            throw new ArgumentException($"{nameof(xs)} and {nameof(ys)} must have equal length");
+        return Enumerable.Range(0, xs2.Length).Select(x => new Coordinates(xs2[x], ys2[x])).ToArray();
     }
 
     /// <summary>
@@ -45,7 +79,7 @@ public static class NumericConversion
     /// using a conversion technique optimized for the platform.
     /// </summary>
     [MethodImpl(ImplOptions)]
-    public static double GenericToDouble<T>(List<T> list, int i)
+    public static double GenericToDouble<T>(IReadOnlyList<T> list, int i)
     {
         var v = list[i];
         return GenericToDouble(ref v);
@@ -69,7 +103,6 @@ public static class NumericConversion
     [MethodImpl(ImplOptions)]
     public static void DoubleToGeneric<T>(double value, out T v)
     {
-#if NETCOREAPP
         if (typeof(T) == typeof(double))
             v = (T)(object)value;
         else if (typeof(T) == typeof(float))
@@ -90,11 +123,17 @@ public static class NumericConversion
             v = (T)(object)Convert.ToDecimal(value);
         else if (typeof(T) == typeof(byte))
             v = (T)(object)Convert.ToByte(value);
+        else if (typeof(T) == typeof(DateTime))
+            v = (T)(object)DateTime.FromOADate(value);
         else
-#endif
-        {
             v = (T)Convert.ChangeType(value, typeof(T));
-        }
+    }
+
+    [MethodImpl(ImplOptions)]
+    public static T DoubleToGeneric<T>(double value)
+    {
+        DoubleToGeneric(value, out T converted);
+        return converted;
     }
 
     public static T[] DoubleToGeneric<T>(this double[] input)
@@ -177,5 +216,79 @@ public static class NumericConversion
         };
 
         return Expression.Lambda<Func<T, T, bool>>(body, paramA, paramB).Compile();
+    }
+
+    public static T Clamp<T>(T input, T min, T max) where T : IComparable
+    {
+        if (input.CompareTo(min) < 0) return min;
+        if (input.CompareTo(max) > 0) return max;
+        return input;
+    }
+
+    public static bool AreReal(double x, double y)
+    {
+        // implemented here because older versions of .NET do not support double.IsReal()
+        return IsReal(x) && IsReal(y);
+    }
+
+    public static bool IsReal(double x)
+    {
+        // implemented here because older versions of .NET do not support double.IsReal()
+        return !double.IsNaN(x) && !double.IsInfinity(x);
+    }
+
+    public static bool IsReal(float x)
+    {
+        // implemented here because older versions of .NET do not support double.IsReal()
+        return !float.IsNaN(x) && !float.IsInfinity(x);
+    }
+
+    /// These methods hold conversion logic between DateTime (used for representing dates)
+    /// and double (used for defining positions on a Cartesian coordinate plane).
+    /// 
+    /// Converting double <-> OADate has issues (e.g., OADates have a limited range), so by
+    /// isolating the conversion here we can ensure we can change the logic later without
+    /// hunting around the code base finding all the OADate conversion calls.
+
+    /// <summary>
+    /// Convert a number that can be plotted on a numeric axis into a DateTime
+    /// </summary>
+    public static DateTime ToDateTime(double value)
+    {
+        if (value <= -657435)
+            return new DateTime(100, 1, 1);
+
+        if (value >= 2958466)
+            return new DateTime(9_999, 1, 1);
+
+        return DateTime.FromOADate(value);
+    }
+
+    /// <summary>
+    /// Convert a DateTime into a number that can be plotted on a numeric axis
+    /// </summary>
+    public static double ToNumber(DateTime value)
+    {
+        if (value.Year < 100)
+            return new DateTime(100, 1, 1).ToOADate();
+
+        if (value.Year >= 10_000)
+            return new DateTime(10_000, 1, 1).ToOADate();
+
+        return value.ToOADate();
+    }
+
+    public static double IncrementLargeDouble(double value)
+    {
+        long bits = BitConverter.DoubleToInt64Bits(value);
+        long nextBits = bits + 1;
+        return BitConverter.Int64BitsToDouble(nextBits);
+    }
+
+    public static double DecrementLargeDouble(double value)
+    {
+        long bits = BitConverter.DoubleToInt64Bits(value);
+        long nextBits = bits - 1;
+        return BitConverter.Int64BitsToDouble(nextBits);
     }
 }

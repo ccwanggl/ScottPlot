@@ -1,137 +1,110 @@
 ﻿namespace ScottPlot;
 
 /// <summary>
-/// Represents a range of values between two coordinates on a single axis
+/// Represents a range of values between a pair of bounding coordinates on a single axis.
+/// Inverted ranges are permitted, but <see cref="Min"/> is always less than <see cref="Max"/>
+/// and <see cref="IsInverted"/> indicates whether this range is inverted.
 /// </summary>
-public class CoordinateRange : IEquatable<CoordinateRange> // TODO: rename to MutableCoordinateRange or something
+public readonly struct CoordinateRange(double value1, double value2)
 {
-    public double Min { get; set; }
-    public double Max { get; set; }
-    public double Center => (Min + Max) / 2;
-    public double Span => Max - Min;
-    public bool HasBeenSet => Max >= Min;
+    public readonly double Value1 = value1;
+    public readonly double Value2 = value2;
 
-    public CoordinateRange(double min, double max)
-    {
-        Min = min;
-        Max = max;
-    }
+    public readonly double Min = Math.Min(value1, value2);
+    public readonly double Max = Math.Max(value1, value2);
+    public readonly bool IsInverted = value1 > value2;
+
+    /// <summary>
+    /// Distance from <see cref="Value1"/> to <see cref="Value2"/> (may be negative)
+    /// </summary>
+    public double Span => Value2 - Value1;
+
+    /// <summary>
+    /// Value located in the center of the range, between <see cref="Value1"/> and <see cref="Value2"/> (may be negative)
+    /// </summary>
+    public double Center => (Value1 + Value2) / 2;
+
+    /// <summary>
+    /// Distance from <see cref="Min"/> to <see cref="Max"/> (always positive)
+    /// </summary>
+    public double Length => Math.Abs(Span);
+
+    /// <summary>
+    /// Return the present range rectified so <see cref="Value1"/> is not greater than <see cref="Value2"/>
+    /// </summary>
+    public CoordinateRange Rectified() => new(Min, Max);
 
     public override string ToString()
     {
-        return $"Min={Min}, Max={Max}, Span={Span}";
+        return IsInverted
+            ? $"CoordinateRange [{Min}, {Max}] (inverted)"
+            : $"CoordinateRange [{Min}, {Max}]";
     }
 
-    /// <summary>
-    /// Returns true if the given position is within the range (inclusive)
-    /// </summary>
-    public bool Contains(double position)
-    {
-        return position >= Min && position <= Max;
-    }
+    // TODO: Figure out how to avoid using NotSet and NoLimits magic numbers.
+    // This struct should probably be broken into a small collection of types.
 
     /// <summary>
-    /// Expand the range if needed to include the given point
-    /// </summary>
-    public void Expand(double value)
-    {
-        if (double.IsNaN(value))
-            return;
-
-        if (double.IsNaN(Min) || value < Min)
-            Min = value;
-
-        if (double.IsNaN(Max) || value > Max)
-            Max = value;
-    }
-
-    /// <summary>
-    /// Expand this range if needed to ensure the given range is included
-    /// </summary>
-    public void Expand(CoordinateRange range)
-    {
-        Expand(range.Min);
-        Expand(range.Max);
-    }
-
-    /// <summary>
-    /// This infinite inverted range is used to indicate a range that has not yet been set
+    /// This magic value is used to indicate the range has not been set.
+    /// It is equal to an inverted infinite range [∞, -∞]
     /// </summary>
     public static CoordinateRange NotSet => new(double.PositiveInfinity, double.NegativeInfinity);
 
     /// <summary>
-    /// Reset this range to inverted infinite values to indicate the range has not yet been set
+    /// This magic value is used to indicate the range has no defined limits.
+    /// It is equal to an inverted infinite range [NaN, NaN]
     /// </summary>
-    public void Reset()
+    public static CoordinateRange NoLimits => new(double.NaN, double.NaN);
+
+    /// <summary>
+    /// Returns true if the given position is within the range (inclusive)
+    /// </summary>
+    public bool Contains(double value)
     {
-        Min = double.PositiveInfinity;
-        Max = double.NegativeInfinity;
-        if (HasBeenSet)
-            throw new InvalidOperationException();
+        return Min <= value && value <= Max;
     }
 
-    public void Set(double min, double max)
+    /// <summary>
+    /// Indicates whether two ranges have any overlapping values
+    /// </summary>
+    public bool Overlaps(CoordinateRange other)
     {
-        Min = min;
-        Max = max;
-    }
+        if (Contains(other.Min) || Contains(other.Max))
+            return true;
 
-    public void Set(CoordinateRange range)
-    {
-        Min = range.Min;
-        Max = range.Max;
-    }
-
-    public void Pan(double delta)
-    {
-        Min += delta;
-        Max += delta;
-    }
-
-    public void PanMouse(float mouseDeltaPx, float dataSizePx)
-    {
-        double pxPerUnitx = dataSizePx / Span;
-        double delta = mouseDeltaPx / pxPerUnitx;
-        Pan(delta);
-    }
-
-    public void ZoomFrac(double frac)
-    {
-        ZoomFrac(frac, Center);
-    }
-
-    public void ZoomMouseDelta(float deltaPx, float dataSizePx)
-    {
-        double deltaFracX = deltaPx / (Math.Abs(deltaPx) + dataSizePx);
-        double fracX = Math.Pow(10, deltaFracX);
-        ZoomFrac(fracX);
-    }
-
-    public void ZoomFrac(double frac, double zoomTo)
-    {
-        double spanLeftX = zoomTo - Min;
-        double spanRightX = Max - zoomTo;
-        Min = zoomTo - spanLeftX / frac;
-        Max = zoomTo + spanRightX / frac;
-    }
-
-    public bool Equals(CoordinateRange? other)
-    {
-        if (other is null)
-            return false;
-
-        return Equals(Min, other.Min) && Equals(Min, other.Min);
-    }
-
-    public override bool Equals(object? obj)
-    {
-        if (obj is null)
-            return false;
-
-        if (obj is CoordinateRange other)
-            return Equals(other);
+        if (other.Contains(Min) || other.Contains(Max))
+            return true;
 
         return false;
+    }
+
+    /// <summary>
+    /// Return the range of values spanned by the given collection (ignoring NaN)
+    /// </summary>
+    public static CoordinateRange Extrema(IEnumerable<double> values)
+    {
+        if (!values.Any())
+            return CoordinateRange.NoLimits;
+
+        var nonNanValues = values.Where(i => !double.IsNaN(i));
+        double min = nonNanValues.Min();
+        double max = nonNanValues.Max();
+        return new(min, max);
+    }
+
+    /// <summary>
+    /// Return a new range expanded to include the given point
+    /// </summary>
+    public CoordinateRange Expanded(double value)
+    {
+        double min = Math.Min(Min, value);
+        double max = Math.Max(Max, value);
+        return new(min, max);
+    }
+
+    public bool Equals(CoordinateRange other)
+    {
+        return Equals(Value1, other.Value1) && Equals(Value2, other.Value2);
     }
 
     public static bool operator ==(CoordinateRange a, CoordinateRange b)
@@ -144,8 +117,24 @@ public class CoordinateRange : IEquatable<CoordinateRange> // TODO: rename to Mu
         return !a.Equals(b);
     }
 
+    public override bool Equals(object? obj)
+    {
+        if (obj is null)
+            return false;
+
+        if (obj is CoordinateRange other)
+        {
+            return Equals(other);
+        }
+
+        return false;
+    }
+
     public override int GetHashCode()
     {
-        return Min.GetHashCode() ^ Max.GetHashCode();
+        int hash = 17;
+        hash = hash * 23 + Value1.GetHashCode();
+        hash = hash * 23 + Value2.GetHashCode();
+        return hash;
     }
 }

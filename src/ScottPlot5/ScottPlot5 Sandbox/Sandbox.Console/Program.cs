@@ -1,7 +1,7 @@
-﻿ScottPlot.Plot plot = new();
-plot.Add.Signal(ScottPlot.Generate.Sin());
-plot.Add.Signal(ScottPlot.Generate.Cos());
-plot.SavePng("test.png", 400, 300);
+﻿using ScottPlot;
 
-plot.ScaleFactor = 2;
-plot.SavePng("test2.png", 400, 300);
+Plot myPlot = new();
+myPlot.Add.Signal(Generate.Sin());
+myPlot.Add.Signal(Generate.Cos());
+
+myPlot.SavePng("test.png", 400, 300).LaunchFile();

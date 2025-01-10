@@ -3,51 +3,29 @@
 /// <summary>
 /// Generate layouts where the data area has a fixed padding from the edge of the figure
 /// </summary>
-public class FixedPadding : ILayoutEngine
+public class FixedPadding(PixelPadding padding) : LayoutEngineBase, ILayoutEngine
 {
-    private PixelPadding Padding { get; }
+    private PixelPadding Padding { get; } = padding;
 
-    public FixedPadding(PixelPadding padding)
+    public Layout GetLayout(PixelRect figureRect, Plot plot)
     {
-        Padding = padding;
-    }
+        IEnumerable<IPanel> panels = plot.Axes.GetPanels();
 
-    private void CalculateOffsets(IEnumerable<IPanel> panels, Dictionary<IPanel, float> sizes, Dictionary<IPanel, float> offsets)
-    {
-        float offset = 0;
-        foreach (IPanel panel in panels)
-        {
-            offsets[panel] = offset;
-            offset += sizes[panel];
-        }
-    }
+        // must recalculate ticks before measuring panels
 
-    private Dictionary<IPanel, float> MeasurePanels(IEnumerable<IPanel> panels)
-    {
-        return panels.ToDictionary(x => x, y => y.Measure());
-    }
+        // NOTE: the actual ticks will be regenerated later, after the layout is determined
+        panels.OfType<IXAxis>().ToList().ForEach(x => x.RegenerateTicks(figureRect.Width));
+        panels.OfType<IYAxis>().ToList().ForEach(x => x.RegenerateTicks(figureRect.Height));
 
-    private Dictionary<IPanel, float> GetPanelOffsets(IEnumerable<IPanel> panels, Dictionary<IPanel, float> panelSizes)
-    {
-        Dictionary<IPanel, float> panelOffsets = new();
-        CalculateOffsets(panels.Where(x => x.Edge == Edge.Left), panelSizes, panelOffsets);
-        CalculateOffsets(panels.Where(x => x.Edge == Edge.Right), panelSizes, panelOffsets);
-        CalculateOffsets(panels.Where(x => x.Edge == Edge.Bottom), panelSizes, panelOffsets);
-        CalculateOffsets(panels.Where(x => x.Edge == Edge.Top), panelSizes, panelOffsets);
-        return panelOffsets;
-    }
-
-    public Layout GetLayout(PixelSize figureSize, IEnumerable<IPanel> panels)
-    {
-        Dictionary<IPanel, float> panelSizes = MeasurePanels(panels);
+        Dictionary<IPanel, float> panelSizes = LayoutEngineBase.MeasurePanels(panels);
         Dictionary<IPanel, float> panelOffsets = GetPanelOffsets(panels, panelSizes);
 
         PixelRect dataRect = new(
-            left: Padding.Left,
-            right: figureSize.Width - Padding.Right,
-            bottom: figureSize.Height - Padding.Bottom,
-            top: Padding.Top);
+            left: figureRect.Left + Padding.Left,
+            right: figureRect.Left + figureRect.Width - Padding.Right,
+            bottom: figureRect.Top + figureRect.Height - Padding.Bottom,
+            top: figureRect.Top + Padding.Top);
 
-        return new Layout(figureSize, dataRect, panelSizes, panelOffsets);
+        return new Layout(figureRect, dataRect, panelSizes, panelOffsets);
     }
 }

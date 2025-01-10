@@ -11,16 +11,35 @@ public readonly struct AxisLimits : IEquatable<AxisLimits>
     public double Bottom { get; }
     public double Top { get; }
 
-    public double Width => Right - Left;
-    public double Height => Top - Bottom;
+    public double HorizontalSpan => Right - Left;
+    public double VerticalSpan => Top - Bottom;
+
+    public double HorizontalCenter => (Right + Left) / 2;
+    public double VerticalCenter => (Top + Bottom) / 2;
+    public Coordinates Center => new(HorizontalCenter, VerticalCenter);
 
     public CoordinateRange XRange => new(Left, Right);
     public CoordinateRange YRange => new(Bottom, Top);
+    public CoordinateRange HorizontalRange => XRange;
+    public CoordinateRange VerticalRange => YRange;
 
     // TODO: make sure callers aren't using this when they dont have to
     public CoordinateRect Rect => new(Left, Right, Bottom, Top);
 
-    public static CoordinateRect Default { get; } = new(-10, 10, -10, 10);
+    public static AxisLimits Default { get; } = new(-10, 10, -10, 10);
+
+    public bool IsRealX => NumericConversion.AreReal(Left, Right);
+    public bool IsRealY => NumericConversion.AreReal(Bottom, Top);
+    public bool IsReal => IsRealX && IsRealY;
+    public bool HasArea => IsReal && HorizontalSpan != 0 && VerticalSpan != 0;
+
+    public AxisLimits(Coordinates coordinates)
+    {
+        Left = coordinates.X;
+        Right = coordinates.X;
+        Bottom = coordinates.Y;
+        Top = coordinates.Y;
+    }
 
     public AxisLimits(CoordinateRect rect)
     {
@@ -40,10 +59,61 @@ public readonly struct AxisLimits : IEquatable<AxisLimits>
 
     public AxisLimits(CoordinateRange xRange, CoordinateRange yRange)
     {
-        Left = xRange.Min;
-        Right = xRange.Max;
-        Bottom = yRange.Min;
-        Top = yRange.Max;
+        Left = xRange.IsInverted ? xRange.Max : xRange.Min;
+        Right = xRange.IsInverted ? xRange.Min : xRange.Max;
+        Bottom = yRange.IsInverted ? yRange.Max : yRange.Min;
+        Top = yRange.IsInverted ? yRange.Min : yRange.Max;
+    }
+
+    public AxisLimits(IEnumerable<IPlottable> plottables)
+    {
+        ExpandingAxisLimits limits = new(plottables);
+        Left = limits.Left;
+        Right = limits.Right;
+        Bottom = limits.Bottom;
+        Top = limits.Top;
+    }
+
+    public AxisLimits(IEnumerable<Coordinates> coordinates)
+    {
+        ExpandingAxisLimits limits = new();
+        limits.Expand(coordinates);
+
+        Left = limits.Left;
+        Right = limits.Right;
+        Bottom = limits.Bottom;
+        Top = limits.Top;
+    }
+
+    public AxisLimits(IEnumerable<Coordinates3d> coordinates)
+    {
+        ExpandingAxisLimits limits = new();
+        limits.Expand(coordinates);
+
+        Left = limits.Left;
+        Right = limits.Right;
+        Bottom = limits.Bottom;
+        Top = limits.Top;
+    }
+
+    public AxisLimits InvertedVertically() => new(Left, Right, Top, Bottom);
+    public AxisLimits InvertedHorizontally() => new(Right, Left, Bottom, Top);
+
+    public AxisLimits ExpandedToInclude(AxisLimits otherLimits)
+    {
+        ExpandingAxisLimits expandingLimits = new(this);
+        expandingLimits.Expand(otherLimits);
+        return expandingLimits.AxisLimits;
+    }
+
+    public static AxisLimits FromPoint(double x, double y)
+    {
+        return new AxisLimits(x, x, y, y);
+    }
+
+    public static AxisLimits FromPoint(Coordinates c)
+    {
+        return new AxisLimits(c.X, c.X, c.Y, c.Y);
     }
 
     public override string ToString()
@@ -51,7 +121,21 @@ public readonly struct AxisLimits : IEquatable<AxisLimits>
         return $"AxisLimits: X=[{Rect.Left}, {Rect.Right}], Y=[{Rect.Bottom}, {Rect.Top}]";
     }
 
+    public string ToString(int digits)
+    {
+        return $"AxisLimits: " +
+            $"X=[{Math.Round(Rect.Left, digits)}, {Math.Round(Rect.Right, digits)}], " +
+            $"Y=[{Math.Round(Rect.Bottom, digits)}, {Math.Round(Rect.Top, digits)}]";
+    }
+
     public static AxisLimits NoLimits => new(double.NaN, double.NaN, double.NaN, double.NaN);
+    public static AxisLimits Unset => new(double.PositiveInfinity, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
+
+    public static AxisLimits VerticalOnly(double yMin, double yMax) => new(double.NaN, double.NaN, yMin, yMax);
+
+    public static AxisLimits HorizontalOnly(double xMin, double xMax) => new(xMin, xMax, double.NaN, double.NaN);
+
+    // TODO: obsolete all Expanded() methods and replace functionality with ExpandingAxisLimits
 
     /// <summary>
     /// Return a new <see cref="AxisLimits"/> expanded to include the given <paramref name="x"/> and <paramref name="y"/>.
@@ -81,25 +165,53 @@ public readonly struct AxisLimits : IEquatable<AxisLimits>
         return Expanded(rect.TopLeft).Expanded(rect.BottomRight);
     }
 
-    public CoordinateRect WithPan(double deltaX, double deltaY)
+    /// <summary>
+    /// Return a new <see cref="AxisLimits"/> expanded to include the area defined by <paramref name="limits"/>.
+    /// </summary>
+    public AxisLimits Expanded(AxisLimits limits)
     {
-        return new CoordinateRect(Rect.Left + deltaX, Rect.Right + deltaX, Rect.Bottom + deltaY, Rect.Top + deltaY);
+        limits = limits.Expanded(Left, Bottom);
+        limits = limits.Expanded(Right, Top);
+        return limits;
     }
 
-    public CoordinateRect WithZoom(double fracX, double fracY)
+    public AxisLimits WithPan(double deltaX, double deltaY)
+    {
+        return new(Left + deltaX, Right + deltaX, Bottom + deltaY, Top + deltaY);
+    }
+
+    public AxisLimits WithZoom(double fracX, double fracY)
     {
         return WithZoom(fracX, fracY, Rect.HorizontalCenter, Rect.VerticalCenter);
     }
 
-    public CoordinateRect WithZoom(double fracX, double fracY, double zoomToX, double zoomToY)
+    public AxisLimits WithZoom(double fracX, double fracY, double zoomToX, double zoomToY)
     {
-        CoordinateRange xRange = new(Rect.Left, Rect.Right);
-        xRange.ZoomFrac(fracX, zoomToX);
+        double xMin = Left;
+        double xMax = Right;
+        double spanLeft = zoomToX - xMin;
+        double spanRight = xMax - zoomToX;
+        xMin = zoomToX - spanLeft / fracX;
+        xMax = zoomToX + spanRight / fracX;
 
-        CoordinateRange yRange = new(Rect.Bottom, Rect.Top);
-        yRange.ZoomFrac(fracY, zoomToY);
+        double yMin = Bottom;
+        double yMax = Top;
+        double spanBottom = zoomToY - yMin;
+        double spanTop = yMax - zoomToY;
+        yMin = zoomToY - spanBottom / fracY;
+        yMax = zoomToY + spanTop / fracY;
 
-        return new(xRange, yRange);
+        return new(xMin, xMax, yMin, yMax);
+    }
+
+    public bool Contains(double x, double y)
+    {
+        return Rect.Contains(x, y);
+    }
+
+    public bool Contains(Coordinates pt)
+    {
+        return Rect.Contains(pt);
     }
 
     public bool Equals(AxisLimits other)

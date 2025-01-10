@@ -1,6 +1,4 @@
-﻿using SkiaSharp;
-
-namespace ScottPlot;
+﻿namespace ScottPlot;
 
 /// <summary>
 /// Describes a rectangle in 2D coordinate space.
@@ -19,7 +17,7 @@ public struct CoordinateRect : IEquatable<CoordinateRect>
     public Coordinates TopLeft => new(Left, Top);
     public Coordinates TopRight => new(Right, Top);
     public Coordinates BottomLeft => new(Left, Bottom);
-    public Coordinates BottomRight => new(Bottom, Right);
+    public Coordinates BottomRight => new(Right, Bottom);
 
     public CoordinateRange XRange => new(Left, Right);
     public CoordinateRange YRange => new(Bottom, Top);
@@ -28,6 +26,8 @@ public struct CoordinateRect : IEquatable<CoordinateRect>
     public double Height => Top - Bottom;
     public double Area => Width * Height;
     public bool HasArea => (Area != 0 && !double.IsNaN(Area) && !double.IsInfinity(Area));
+    public bool IsInvertedX => Left > Right;
+    public bool IsInvertedY => Top < Bottom;
 
     public CoordinateRect(CoordinateRange xRange, CoordinateRange yRange)
     {
@@ -35,6 +35,18 @@ public struct CoordinateRect : IEquatable<CoordinateRect>
         Right = xRange.Max;
         Bottom = yRange.Min;
         Top = yRange.Max;
+    }
+
+    public CoordinateRect(CoordinateRangeMutable xRange, CoordinateRangeMutable yRange)
+    {
+        Left = xRange.Min;
+        Right = xRange.Max;
+        Bottom = yRange.Min;
+        Top = yRange.Max;
+    }
+
+    public CoordinateRect(IAxes axes) : this(axes.XAxis.Range, axes.YAxis.Range)
+    {
     }
 
     public CoordinateRect(Coordinates pt1, Coordinates pt2)
@@ -64,7 +76,35 @@ public struct CoordinateRect : IEquatable<CoordinateRect>
 
     public bool Contains(double x, double y)
     {
-        return x >= Left && x <= Right && y >= Bottom && y <= Top;
+        return ContainsX(x) && ContainsY(y);
+    }
+
+    public bool ContainsX(double x)
+    {
+        return IsInvertedX ? x >= Right && x <= Left : x >= Left && x <= Right;
+    }
+
+    public bool ContainsY(double y)
+    {
+        return IsInvertedY ? y >= Top && y <= Bottom : y >= Bottom && y <= Top;
+    }
+
+    public CoordinateRect Expanded(Coordinates point)
+    {
+        double exLeft = Left;
+        double exRight = Right;
+        double exBottom = Bottom;
+        double exTop = Top;
+
+        if (!Contains(point))
+        {
+            exLeft = Math.Min(exLeft, point.X);
+            exRight = Math.Max(exRight, point.X);
+            exBottom = Math.Min(exBottom, point.Y);
+            exTop = Math.Max(exTop, point.Y);
+        }
+
+        return new CoordinateRect(exLeft, exRight, exBottom, exTop);
     }
 
     public bool Contains(Coordinates point) => Contains(point.X, point.Y);

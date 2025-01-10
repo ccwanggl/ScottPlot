@@ -16,22 +16,27 @@ public partial class MouseTracker : Form, IDemoWindow
         InitializeComponent();
 
         CH = formsPlot1.Plot.Add.Crosshair(0, 0);
+        CH.TextColor = Colors.White;
+        CH.TextBackgroundColor = CH.HorizontalLine.Color;
+
+        formsPlot1.Refresh();
 
         formsPlot1.MouseMove += (s, e) =>
         {
-            // demonstrate pixel-to-coordinates
-            Pixel px = new(e.X, e.Y);
-            Coordinates coordinates = formsPlot1.GetCoordinates(px);
-
-            // demonstrate coordinates-to-pixel
-            Pixel px2 = formsPlot1.Plot.GetPixel(coordinates);
-
-            // place the crosshair where the mouse is
-            CH.Position = coordinates;
+            Pixel mousePixel = new(e.X, e.Y);
+            Coordinates mouseCoordinates = formsPlot1.Plot.GetCoordinates(mousePixel);
+            this.Text = $"X={mouseCoordinates.X:N3}, Y={mouseCoordinates.Y:N3}";
+            CH.Position = mouseCoordinates;
+            CH.VerticalLine.Text = $"{mouseCoordinates.X:N3}";
+            CH.HorizontalLine.Text = $"{mouseCoordinates.Y:N3}";
             formsPlot1.Refresh();
+        };
 
-            // display where the mouse is in the titlebar
-            Text = $"{px2} {coordinates}";
+        formsPlot1.MouseDown += (s, e) =>
+        {
+            Pixel mousePixel = new(e.X, e.Y);
+            Coordinates mouseCoordinates = formsPlot1.Plot.GetCoordinates(mousePixel);
+            Text = $"X={mouseCoordinates.X:N3}, Y={mouseCoordinates.Y:N3} (mouse down)";
         };
     }
 }

@@ -9,6 +9,12 @@ public class ExpandingAxisLimits : IEquatable<ExpandingAxisLimits>
     public double Right { get; set; } = double.NaN;
     public double Bottom { get; set; } = double.NaN;
     public double Top { get; set; } = double.NaN;
+    public double HorizontalSpan => Right - Left;
+    public double VerticalSpan => Top - Bottom;
+    public bool IsRealX => NumericConversion.AreReal(Left, Right);
+    public bool IsRealY => NumericConversion.AreReal(Bottom, Top);
+    public bool IsReal => IsRealX && IsRealY;
+    public bool HasArea => IsReal && HorizontalSpan != 0 && VerticalSpan != 0;
 
     public AxisLimits AxisLimits => new(Left, Right, Bottom, Top);
 
@@ -27,6 +33,33 @@ public class ExpandingAxisLimits : IEquatable<ExpandingAxisLimits>
         Expand(initialLimits);
     }
 
+    public ExpandingAxisLimits(IEnumerable<IPlottable> plottables)
+    {
+        foreach (IPlottable plottable in plottables)
+        {
+            Expand(plottable.GetAxisLimits());
+        }
+    }
+
+    public override string ToString()
+    {
+        return $"Expanding Limits: X=[{Left}, {Right}] Y=[{Bottom}, {Top}]";
+    }
+
+    public void SetX(double left, double right)
+    {
+        Left = left;
+        Right = right;
+    }
+
+    public void SetY(double bottom, double top)
+    {
+        Bottom = bottom;
+        Top = top;
+    }
+
+    // TODO: Methods like Expand() should be fluent, named Expanded(), and returning this object
+
     /// <summary>
     /// Expanded limits to include the given <paramref name="x"/> and <paramref name="y"/>.
     /// </summary>
@@ -36,13 +69,30 @@ public class ExpandingAxisLimits : IEquatable<ExpandingAxisLimits>
         ExpandY(y);
     }
 
+    public void Expand(IPlottable plottable)
+    {
+        AxisLimits limits = plottable.GetAxisLimits();
+        Expand(limits);
+    }
+
     /// <summary>
     /// Expanded limits to include the given <paramref name="x"/>.
     /// </summary>
     public void ExpandX(double x)
     {
-        Left = !double.IsNaN(Left) ? Math.Min(Left, x) : x;
-        Right = !double.IsNaN(Right) ? Math.Max(Right, x) : x;
+        // if incoming is NaN do nothing
+        if (double.IsNaN(x))
+            return;
+
+        // if existing is NaN, use the new value
+        if (double.IsNaN(Left))
+            Left = x;
+        if (double.IsNaN(Right))
+            Right = x;
+
+        // otherwise use minmax
+        Left = Math.Min(Left, x);
+        Right = Math.Max(Right, x);
     }
 
     /// <summary>
@@ -50,8 +100,19 @@ public class ExpandingAxisLimits : IEquatable<ExpandingAxisLimits>
     /// </summary>
     public void ExpandY(double y)
     {
-        Bottom = !double.IsNaN(Bottom) ? Math.Min(Bottom, y) : y;
-        Top = !double.IsNaN(Top) ? Math.Max(Top, y) : y;
+        // if incoming is NaN do nothing
+        if (double.IsNaN(y))
+            return;
+
+        // if existing is NaN, use the new value
+        if (double.IsNaN(Bottom))
+            Bottom = y;
+        if (double.IsNaN(Top))
+            Top = y;
+
+        // otherwise use minmax
+        Bottom = Math.Min(Bottom, y);
+        Top = Math.Max(Top, y);
     }
 
     /// <summary>
@@ -65,7 +126,7 @@ public class ExpandingAxisLimits : IEquatable<ExpandingAxisLimits>
     /// <summary>
     /// Expanded limits to include the given <paramref name="coordinates"/>.
     /// </summary>
-    public void Expand(IReadOnlyList<Coordinates> coordinates)
+    public void Expand(IEnumerable<Coordinates> coordinates)
     {
         foreach (Coordinates coordinate in coordinates)
         {
@@ -74,21 +135,38 @@ public class ExpandingAxisLimits : IEquatable<ExpandingAxisLimits>
     }
 
     /// <summary>
-    /// Expanded limits to include all corners of the given <paramref name="rect"/>.
+    /// Expanded limits to include the given <paramref name="coordinates"/>.
     /// </summary>
+    public void Expand(IEnumerable<Coordinates3d> coordinates)
+    {
+        foreach (Coordinates3d coordinate in coordinates)
+        {
+            Expand(coordinate.X, coordinate.Y);
+        }
+    }
+
     public void Expand(CoordinateRect rect)
     {
         Expand(rect.Left, rect.Top);
         Expand(rect.Right, rect.Bottom);
     }
 
-    /// <summary>
-    /// Expanded limits to include all corners of the given <paramref name="limits"/>.
-    /// </summary>
     public void Expand(AxisLimits limits)
     {
-        Expand(limits.Left, limits.Top);
-        Expand(limits.Right, limits.Bottom);
+        ExpandX(limits);
+        ExpandY(limits);
+    }
+
+    public void ExpandX(AxisLimits limits)
+    {
+        ExpandX(limits.Left);
+        ExpandX(limits.Right);
+    }
+
+    public void ExpandY(AxisLimits limits)
+    {
+        ExpandY(limits.Bottom);
+        ExpandY(limits.Top);
     }
 
     public bool Equals(ExpandingAxisLimits? other)
