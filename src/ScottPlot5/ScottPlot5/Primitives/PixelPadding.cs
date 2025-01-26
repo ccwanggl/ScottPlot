@@ -10,8 +10,8 @@ public struct PixelPadding
     public float Bottom;
     public float Top;
 
-    public float TotalHorizontal => Left + Right;
-    public float TotalVertical => Top + Bottom;
+    public float Horizontal => Left + Right;
+    public float Vertical => Top + Bottom;
 
     public PixelPadding(float padding)
     {
@@ -21,12 +21,28 @@ public struct PixelPadding
         Top = padding;
     }
 
+    public PixelPadding(float x, float y)
+    {
+        Left = x;
+        Right = x;
+        Bottom = y;
+        Top = y;
+    }
+
     public PixelPadding(float left, float right, float bottom, float top)
     {
         Left = left;
         Right = right;
         Bottom = bottom;
         Top = top;
+    }
+
+    public PixelPadding(PixelSize figureSize, PixelRect dataArea)
+    {
+        Left = dataArea.Left;
+        Right = figureSize.Width - dataArea.Right;
+        Top = dataArea.Top;
+        Bottom = figureSize.Height - dataArea.Bottom;
     }
 
     public void Expand(float amount)

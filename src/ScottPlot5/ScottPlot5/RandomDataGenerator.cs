@@ -1,41 +1,53 @@
-﻿using System.Security.Cryptography;
-
-namespace ScottPlot;
+﻿namespace ScottPlot;
 
 #nullable enable
 
 public class RandomDataGenerator
 {
-    private Random Rand;
-    private readonly RandomNumberGenerator RNG;
-    public static RandomDataGenerator Generate { get; private set; } = new(0);
-
+#if !NET5_0_OR_GREATER
     /// <summary>
-    /// Use a random seed so each generator returns different data.
+    /// Global random number generator, to ensure each generator will returns different data.
+    /// Using ThreadLocal, because Random is not thread safe.
     /// </summary>
-    public RandomDataGenerator()
+    private static readonly System.Threading.ThreadLocal<Random> GlobalRandomThread = new(() => new Random(GetCryptoRandomInt()));
+
+    private static int GetCryptoRandomInt()
     {
-        RNG = RandomNumberGenerator.Create();
+        var RNG = System.Security.Cryptography.RandomNumberGenerator.Create();
         byte[] data = new byte[sizeof(int)];
         RNG.GetBytes(data);
-        int randomValue = BitConverter.ToInt32(data, 0) & (int.MaxValue - 1);
-        Rand = new Random(randomValue);
+        return BitConverter.ToInt32(data, 0) & (int.MaxValue - 1);
     }
+#endif
 
     /// <summary>
-    /// Use a fixed seed so each generator returns the same data.
+    /// To select right random number generator
     /// </summary>
-    public RandomDataGenerator(int seed = 0)
+    private Random Rand;
+
+    /// <summary>
+    /// Create a random number generator.
+    /// The seed is random by default, but could be fixed to the defined value
+    /// </summary>
+    public RandomDataGenerator(int? seed = null)
     {
-        Rand = new(seed);
-        RNG = RandomNumberGenerator.Create();
+        Rand = seed.HasValue
+            ? new Random(seed.Value)
+#if NET5_0_OR_GREATER
+            : Random.Shared;
+#else
+            : GlobalRandomThread.Value!;
+#endif
     }
 
-    public void RandomizeSeed()
+    public void Seed(int seed)
     {
-        Rand = new();
-        Generate = new();
+        Rand = new(seed);
     }
+
+    public static RandomDataGenerator Generate { get; private set; } = new(0);
+
+
 
     #region Methods that return single numbers
 
@@ -77,15 +89,31 @@ public class RandomDataGenerator
     /// <summary>
     /// Return a random integer up to the maximum integer size
     /// </summary>
-    public double RandomInteger()
+    public int RandomInteger()
     {
         return Rand.Next();
     }
 
     /// <summary>
+    /// Return a random byte (0-255)
+    /// </summary>
+    public byte RandomByte()
+    {
+        return (byte)Rand.Next(256);
+    }
+
+    /// <summary>
+    /// Return a random byte between the given values (inclusive)
+    /// </summary>
+    public byte RandomByte(byte min, byte max)
+    {
+        return (byte)Rand.Next(min, max + 1);
+    }
+
+    /// <summary>
     /// Return a random integer between zero (inclusive) and <paramref name="max"/> (exclusive)
     /// </summary>
-    public double RandomInteger(int max)
+    public int RandomInteger(int max)
     {
         return Rand.Next(max);
     }
@@ -93,7 +121,7 @@ public class RandomDataGenerator
     /// <summary>
     /// Return a random integer between <paramref name="min"/> (inclusive) and <paramref name="max"/> (exclusive)
     /// </summary>
-    public double RandomInteger(int min, int max)
+    public int RandomInteger(int min, int max)
     {
         return Rand.Next(min, max);
     }
@@ -111,6 +139,29 @@ public class RandomDataGenerator
     }
 
     #endregion
+
+    /// <summary>
+    /// Mutate the given array by adding noise (± magnitude) and return it
+    /// </summary>
+    public void AddNoiseInPlace(double[] values, double magnitude)
+    {
+        for (int i = 0; i < values.Length; i++)
+        {
+            double noise = (2 * RandomNumber() - 1) * magnitude;
+            values[i] = values[i] + noise;
+        }
+    }
+
+    /// <summary>
+    /// Return a copy of the given data with random noise added (± magnitude)
+    /// </summary>
+    public double[] AddNoise(double[] input, double magnitude)
+    {
+        double[] output = new double[input.Length];
+        Array.Copy(input, output, input.Length);
+        AddNoiseInPlace(output, magnitude);
+        return output;
+    }
 
     /// <summary>
     /// Uniformly distributed random numbers between 0 and 1
@@ -131,7 +182,7 @@ public class RandomDataGenerator
     public double[] RandomNormalSample(int count, double mean = 0, double stdDev = 1)
     {
         double[] values = new double[count];
-        for (int i = 0; i <= count; i++)
+        for (int i = 0; i < count; i++)
         {
             values[i] = RandomNormalNumber(mean, stdDev);
         }
@@ -161,7 +212,7 @@ public class RandomDataGenerator
         data[0] = offset;
         for (int i = 1; i < data.Length; i++)
         {
-            // Random number between -1 and 1;
+            // RandomSample number between -1 and 1;
             double randomStep = Rand.NextDouble() * 2 - 1;
             // Using linear equation y_2 = m * x + y_1 where x = 1,
             // then adding a scaled random step simplifies to:
@@ -173,14 +224,22 @@ public class RandomDataGenerator
     /// <summary>
     /// Return a collection OHLCs representing random price action
     /// </summary>
-    public List<IOHLC> RandomOHLCs(int count)
+    public List<OHLC> RandomOHLCs(int count)
     {
-        DateTime[] dates = ScottPlot.Generate.DateTime.Weekdays(count);
+        return RandomOHLCs(count, new DateTime(2024, 1, 1));
+    }
+
+    /// <summary>
+    /// Return a collection OHLCs representing random price action
+    /// </summary>
+    public List<OHLC> RandomOHLCs(int count, DateTime start)
+    {
+        DateTime[] dates = ScottPlot.Generate.ConsecutiveWeekdays(count, start);
         TimeSpan span = TimeSpan.FromDays(1);
 
         double mult = 1;
 
-        List<IOHLC> ohlcs = new();
+        List<OHLC> ohlcs = new();
         double open = RandomNumber(150, 250);
         for (int i = 0; i < count; i++)
         {

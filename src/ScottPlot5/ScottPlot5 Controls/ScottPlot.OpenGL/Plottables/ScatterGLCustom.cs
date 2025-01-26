@@ -1,6 +1,4 @@
 ﻿using OpenTK.Graphics.OpenGL;
-using ScottPlot.Control;
-using ScottPlot.DataSources;
 using ScottPlot.OpenGL.GLPrograms;
 using SkiaSharp;
 using System;
@@ -13,7 +11,7 @@ namespace ScottPlot.Plottables;
 /// </summary>
 public class ScatterGLCustom : ScatterGL
 {
-    private IMarkersDrawProgram? JoinsProgram;
+    protected IMarkersDrawProgram? JoinsProgram;
 
     public ScatterGLCustom(IScatterSource data, IPlotControl control) : base(data, control)
     {
@@ -27,9 +25,9 @@ public class ScatterGLCustom : ScatterGL
         JoinsProgram = new MarkerFillCircleProgram();
     }
 
-    protected override void RenderWithOpenGL(SKSurface surface, GRContext context)
+    protected override void RenderWithOpenGL(SKCanvas canvas, GRContext context)
     {
-        int height = (int)surface.Canvas.LocalClipBounds.Height;
+        int height = (int)canvas.LocalClipBounds.Height;
 
         context.Flush();
         context.ResetContext();
@@ -73,5 +71,24 @@ public class ScatterGLCustom : ScatterGL
             GL.DrawArrays(PrimitiveType.Points, 0, VerticesCount);
         }
         RenderMarkers();
+    }
+
+    private bool _disposed = false;
+
+    protected override void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing)
+            {
+                GL.Finish();
+                JoinsProgram?.Dispose();
+                JoinsProgram = null;
+            }
+
+            _disposed = true;
+        }
+
+        base.Dispose(disposing);
     }
 }

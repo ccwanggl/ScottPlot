@@ -7,5 +7,6 @@ public class LeftAxis : YAxisBase, IYAxis
     public LeftAxis()
     {
         TickGenerator = new TickGenerators.NumericAutomatic();
+        LabelRotation = -90;
     }
 }

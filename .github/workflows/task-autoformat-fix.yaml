@@ -1,0 +1,44 @@
+name: Autoformat Fix
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      GH_TOKEN:
+        required: true
+
+jobs:
+  sp4-autoformat:
+    name: Fix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout as Contributor
+        uses: actions/checkout@v4
+        if: github.event_name == 'pull_request'
+      - name: Checkout as Administrator
+        uses: actions/checkout@v4
+        if: github.event_name != 'pull_request'
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0"
+      - name: Run Autoformatter
+        run: |
+          dotnet format "src/ScottPlot5/ScottPlot5/ScottPlot.csproj"
+          dotnet format "src/ScottPlot5/ScottPlot5 Tests/Unit Tests/ScottPlot Unit Tests.csproj"
+          dotnet format "src/ScottPlot5/ScottPlot5 Cookbook/ScottPlot Cookbook.csproj"
+          dotnet format "src/ScottPlot5/ScottPlot5 Demos/ScottPlot5 WinForms Demo/WinForms Demo.csproj"
+          dotnet format "src/ScottPlot5/ScottPlot5 Demos/ScottPlot5 WPF Demo/WPF Demo.csproj"
+      - name: Inspect Code Format Changes
+        id: verify_diff
+        run: git diff --quiet . || echo "changed=true" >> $GITHUB_OUTPUT
+      - name: Commit Changes
+        if: steps.verify_diff.outputs.changed == 'true'
+        run: |
+          git config --global user.name 'Scott W Harden (via GitHub Actions)'
+          git config --global user.email 'swharden@gmail.com'
+          git pull
+          git commit -am "CI: autoformat"
+          git push

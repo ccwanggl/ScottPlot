@@ -1,28 +1,32 @@
-﻿using ScottPlot.Control;
-
-namespace ScottPlot;
+﻿namespace ScottPlot;
 
 public interface IPlotControl
 {
     /// <summary>
-    /// The <see cref="Plot"/> displayed by this interactive control
+    /// The primary <see cref="Plot"/> displayed by this interactive control
     /// </summary>
     Plot Plot { get; }
 
     /// <summary>
-    /// Request a re-render of the <see cref="Plot"/>
+    /// The multiplot managed by this interactive control
+    /// </summary>
+    IMultiplot Multiplot { get; set; }
+
+    /// <summary>
+    /// Render the plot and update the image
     /// </summary>
     void Refresh();
 
     /// <summary>
-    /// Advanced options for configuring how user inputs manipulate the plot
+    /// This object takes in UI events and contains logic for how to respond to them.
+    /// This is a newer alternative to the older <see cref="Interaction"/> system.
     /// </summary>
-    Interaction Interaction { get; }
+    Interactivity.UserInputProcessor UserInputProcessor { get; }
 
     /// <summary>
-    /// Replace the interaction back-end with a custom one
+    /// Platform-specific logic for managing the context menu
     /// </summary>
-    void Replace(Interaction interaction);
+    IPlotMenu? Menu { get; set; }
 
     /// <summary>
     /// Launch the default pop-up menu (typically in response to a right-click) at the given position in the control
@@ -33,12 +37,6 @@ public interface IPlotControl
     /// Context for hardware-accelerated graphics (or null if not available)
     /// </summary>
     GRContext? GRContext { get; }
-
-    /// <summary>
-    /// Logic for translating screen position (pixels) to coordinates in (axis units).
-    /// Implementers must add logic to compensate for DPI scaling.
-    /// </summary>
-    Coordinates GetCoordinates(Pixel px, IXAxis? xAxis = null, IYAxis? yAxis = null);
 
     /// <summary>
     /// Determine the DPI scaling ratio of the present display.
@@ -52,4 +50,22 @@ public interface IPlotControl
     /// Mouse positions are multiplied by this value for pixel/coordinate conversions.
     /// </summary>
     float DisplayScale { get; set; }
+
+    /// <summary>
+    /// Disposes the current Plot and creates a new one for the control
+    /// </summary>
+    void Reset();
+
+    /// <summary>
+    /// Loads the given Plot into the control
+    /// </summary>
+    void Reset(Plot plot);
+}
+
+public static class IPlotControlExtensions
+{
+    public static Plot? GetPlotAtPixel(this IPlotControl plotControl, Pixel pixel)
+    {
+        return plotControl.Multiplot.GetPlotAtPixel(pixel);
+    }
 }
